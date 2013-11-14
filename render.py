@@ -20,10 +20,8 @@ class Render:
         vertex_shader = shaders.compileShader("""
         #version 130
 
-        varying vec4 color;
-
         void main() {
-            color = gl_Color;
+            gl_TexCoord[0] = gl_MultiTexCoord0;
             gl_Position = gl_ModelViewProjectionMatrix * gl_Vertex;
         }
         """, GL_VERTEX_SHADER)
@@ -31,11 +29,11 @@ class Render:
         fragment_shader = shaders.compileShader("""
         #version 130
 
-        varying vec4 color;
+        uniform sampler2D texture;
 
         void main() {
-            //gl_FragColor = color;
-            gl_FragColor = vec4(1, 0, 0, 0);
+            //gl_FragColor = vec4(1, 0, 0, 0);
+            gl_FragColor = texture2D(texture, gl_TexCoord[0].st);
         }
         """, GL_FRAGMENT_SHADER)
         self.shader = shaders.compileProgram(vertex_shader, fragment_shader)
@@ -51,9 +49,18 @@ class Render:
         imp = objImporter.Importer()
         imp.open("/home/esa/test.obj")
         arr = numpy.array(imp.getArray(), 'f')
-        print(arr)
         self.size = len(arr)
         self.vbo = vbo.VBO(arr)
+
+        print(imp.getMaterial().map_Kd)
+
+        img = pygame.image.load("/home/esa/" + imp.getMaterial().map_Kd)
+        imgData = pygame.image.tostring(img, "RGBA", 1)
+
+
+        self.texId = glGenTextures(1)
+        glBindTexture(GL_TEXTURE_2D, self.texId)
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, img.get_width(), img.get_height(), 0 , GL_RGBA, GL_UNSIGNED_BYTE, imgData)
 
         glClearColor(1, 1, 1, 0)
 
@@ -132,11 +139,23 @@ class Render:
 
 
             glUseProgram(self.shader)
+
+            texture_location = glGetUniformLocation(self.shader, "texture")
+            glUniform1i(texture_location, 0)
+
+            glActiveTexture(GL_TEXTURE0)
+            glBindTexture(GL_TEXTURE_2D, self.texId)
+
+            glShadeModel(GL_FLAT)
+
             try:
                 self.vbo.bind()
                 try:
                     glEnableClientState(GL_VERTEX_ARRAY)
-                    glVertexPointerf(self.vbo)
+
+                    glVertexPointer(3, GL_FLOAT, 32, self.vbo)
+                    glTexCoordPointer(2, GL_FLOAT, 32, self.vbo+12)
+                    glNormalPointer(GL_FLOAT, 32, self.vbo+20)
                     glDrawArrays(GL_TRIANGLES, 0, self.size)
                 finally:
                     glDisableClientState(GL_VERTEX_ARRAY)
